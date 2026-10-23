@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'">
+  <title>AiBro</title>
+  <link rel="stylesheet" href="buddy.css">
+</head>
+<body>
+  <div class="buddy" id="buddy">
+    <canvas id="water" width="256" height="256"></canvas>
+    <div class="face" id="face">
+      <div class="mood">
+        <img src="buddy/face-neutro.png" data-mood="neutro" class="on" alt="">
+        <img src="buddy/face-happy.png" data-mood="happy" alt="">
+        <img src="buddy/face-nap.png" data-mood="nap" alt="">
+        <img src="buddy/face-quest.png" data-mood="quest" alt="">
+        <div class="eyes" id="eyes" data-mood="work">
+          <img src="buddy/face-eye-left.png" class="eye left" alt="">
+          <img src="buddy/face-eye-right.png" class="eye right" alt="">
+          <div class="brow"></div>
+        </div>
+        <div class="chars" id="chars"></div>
+      </div>
+    </div>
+  </div>
+  <script src="buddy.js"></script>
+</body>
+</html>

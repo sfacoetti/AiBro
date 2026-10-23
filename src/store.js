@@ -15,6 +15,7 @@ class Store extends EventEmitter {
     this.github = { configured: false, notifications: [], reviews: [], actions: [], error: null, updatedAt: null };
     this.hooks = { installed: false, partial: false, events: [] };
     this.usage = null;
+    this.localRepos = [];
     this.seq = 0;
     this.changeTimer = null;
   }
@@ -109,7 +110,7 @@ class Store extends EventEmitter {
     const approvals = [...this.approvals.values()]
       .sort((a, b) => a.createdAt - b.createdAt)
       .map(({ respond, ...rest }) => ({ ...rest, sessionTitle: this.sessions.get(rest.sessionId)?.title || null }));
-    return { sessions, approvals, apps: this.apps, github: this.github, hooks: this.hooks, usage: this.usage };
+    return { sessions, approvals, apps: this.apps, github: this.github, localRepos: this.localRepos, hooks: this.hooks, usage: this.usage };
   }
 }
 

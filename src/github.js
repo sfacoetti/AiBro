@@ -1,6 +1,7 @@
 // Polling di GitHub: notifiche non lette, PR in attesa della tua review ed esito delle Actions.
 const API = 'https://api.github.com';
 const AUTO_REPOS_MAX = 10;
+const SESSION_REPOS_MAX = 10;
 const AUTO_REPOS_DAYS = 7;
 const RUNS_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -79,8 +80,11 @@ async function fetchActions(token, repos) {
   return { runs, errors };
 }
 
-async function fetchGithub(token, { repos = [] } = {}) {
-  const watched = repos.length ? repos : await autoRepos(token).catch(() => []);
+// Repo delle Actions: quelli in cui lavorano le sessioni; senza sessioni la lista delle impostazioni,
+// e se anche quella è vuota i repo con push recenti.
+async function fetchGithub(token, { repos = [], sessionRepos = [] } = {}) {
+  const watchSource = sessionRepos.length ? 'sessions' : repos.length ? 'manual' : 'auto';
+  const watched = watchSource === 'sessions' ? sessionRepos.slice(0, SESSION_REPOS_MAX) : watchSource === 'manual' ? repos : await autoRepos(token).catch(() => []);
   const [notifs, reviews, actions] = await Promise.all([
     gh(token, '/notifications?per_page=30'),
     gh(token, '/search/issues?per_page=20&q=' + encodeURIComponent('is:open is:pr review-requested:@me archived:false')),
@@ -107,7 +111,7 @@ async function fetchGithub(token, { repos = [] } = {}) {
     actions: actions.runs,
     actionsErrors: actions.errors,
     watchedRepos: watched,
-    autoRepos: !repos.length,
+    watchSource,
   };
 }
 

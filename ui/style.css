@@ -30,23 +30,6 @@ code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }
 .muted { color: var(--muted); }
 .small { font-size: 11.5px; }
 
-/* Finestra contratta: solo la maniglia con le frecce verso cui si riapre */
-body.collapsed { background: var(--accent); border: 0; }
-body.collapsed > *:not(.dock-handle) { display: none !important; }
-.dock-handle { display: none; }
-body.collapsed .dock-handle {
-  display: flex; flex: 1; align-items: center; justify-content: center; gap: 2px;
-  flex-direction: column; padding: 0; border: 0; cursor: pointer;
-  background: var(--accent);
-}
-body.collapsed .dock-handle:hover { filter: brightness(1.12); }
-.dock-handle svg { width: 16px; height: 16px; flex-shrink: 0; }
-/* Le frecce di base puntano a sinistra: verso dove si riapre una striscia sul lato destro. */
-body[data-edge="left"] .dock-handle svg { transform: rotate(180deg); }
-body[data-edge="top"] .dock-handle, body[data-edge="bottom"] .dock-handle { flex-direction: row; }
-body[data-edge="top"] .dock-handle svg { transform: rotate(-90deg); }
-body[data-edge="bottom"] .dock-handle svg { transform: rotate(90deg); }
-
 /* Barra del titolo trascinabile */
 .titlebar {
   -webkit-app-region: drag;
@@ -58,7 +41,7 @@ body[data-edge="bottom"] .dock-handle svg { transform: rotate(90deg); }
 }
 .titlebar button, .titlebar .pill.red { -webkit-app-region: no-drag; }
 .brand { font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.logo { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: inset 0 0 0 3px var(--accent), inset 0 0 0 6px #fff3; }
+.logo { width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; -webkit-user-drag: none; }
 .summary { flex: 1; display: flex; gap: 6px; justify-content: flex-end; }
 .pill { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--panel-2); color: var(--muted); }
 .pill.amber { background: #f59e0b22; color: var(--amber); }
@@ -71,6 +54,7 @@ body[data-edge="bottom"] .dock-handle svg { transform: rotate(90deg); }
 .run-ok { color: var(--green); }
 .run-fail { color: var(--red); }
 .run-progress { color: var(--amber); animation: pulse 1.4s infinite; }
+.git-todo { color: var(--amber); }
 .run-skip { color: var(--muted); }
 .item button.ghost.small { align-self: center; }
 .win-actions { display: flex; }

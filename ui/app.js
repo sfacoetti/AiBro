@@ -193,16 +193,66 @@ function actionItem(r) {
     rerun);
 }
 
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// Cosa resta da fare sul repository locale, nell'ordine in cui va fatto: risolvere, committare, pushare, scaricare.
+function localRepoTodo(r) {
+  if (r.error) return { cls: 'run-fail', icon: '✗', lines: [r.error] };
+  const lines = [];
+  const changes = r.changed + r.untracked;
+  if (r.conflicts) lines.push(`${plural(r.conflicts, 'conflitto', 'conflitti')} da risolvere`);
+  if (changes) {
+    const detail = [r.staged && `${r.staged} in stage`, r.untracked && plural(r.untracked, 'non tracciato', 'non tracciati')].filter(Boolean).join(', ');
+    lines.push(`${plural(changes, 'file modificato', 'file modificati')}${detail ? ` (${detail})` : ''}: da committare`);
+  }
+  if (r.ahead) lines.push(`${plural(r.ahead, 'commit', 'commit')} da pushare${r.upstream ? '' : ' (branch non ancora sul remoto)'}`);
+  if (r.behind) lines.push(`${plural(r.behind, 'commit', 'commit')} sul remoto: puoi fare pull`);
+  if (!r.upstream && !r.ahead && r.branch) lines.push('Branch senza remoto collegato');
+  if (!lines.length) return { cls: 'run-ok', icon: '✓', lines: ['Tutto committato e allineato al remoto'] };
+  return { cls: r.conflicts ? 'run-fail' : 'git-todo', icon: r.conflicts ? '!' : '●', lines };
+}
+
+function gitButton(label, title, action) {
+  return h('button', {
+    class: 'ghost small',
+    title,
+    onclick: async (e) => {
+      e.stopPropagation();
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = '…';
+      try { await action(); btn.textContent = 'Fatto'; } catch (err) { btn.textContent = 'Errore'; btn.title = err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''); btn.disabled = false; }
+    },
+  }, label);
+}
+
+function localRepoItem(r) {
+  const todo = localRepoTodo(r);
+  const fetched = ago(r.fetchedAt);
+  return h('div', { class: 'item', onclick: () => aibro.gitOpenFolder(r.path), title: `${r.path}\nSessioni: ${r.sessions.join(', ')}${fetched ? `\nUltimo fetch: ${fetched === 'ora' ? 'ora' : `${fetched} fa`}` : ''}` },
+    h('span', { class: `run-icon ${todo.cls}` }, todo.icon),
+    h('div', { class: 'body' },
+      h('div', { class: 'title' }, h('span', {}, r.github || r.name), h('span', { class: 'chip' }, r.branch || 'HEAD staccato')),
+      todo.lines.map((l) => h('div', { class: 'line' }, l))),
+    r.behind && !r.error ? gitButton('Pull', 'git pull --ff-only', () => aibro.gitPull(r.path)) : null,
+    r.ahead && !r.error ? gitButton('Push', 'git push', () => aibro.gitPush(r.path)) : null);
+}
+
 function renderGithub() {
   const g = state.github;
   const el = $('tab-github');
+  const local = state.localRepos || [];
+  const localParts = [
+    h('div', { class: 'section-title' }, 'Repository locali delle sessioni'),
+    local.length ? h('div', { class: 'list' }, local.map(localRepoItem)) : h('div', { class: 'muted small' }, 'Nessuna sessione in una cartella con git.'),
+  ];
   if (!g.configured) {
-    el.replaceChildren(h('div', { class: 'banner' },
+    el.replaceChildren(...localParts, h('div', { class: 'banner' },
       h('div', {}, h('b', {}, 'Collega GitHub'), h('div', { class: 'muted small' }, 'Inserisci un personal access token nelle impostazioni per vedere Actions, notifiche e review richieste.')),
       h('button', { class: 'primary', onclick: openSettings }, 'Apri impostazioni')));
     return;
   }
-  const parts = [];
+  const parts = [...localParts];
   if (g.error) parts.push(h('div', { class: 'error' }, g.error));
   const runs = g.actions || [];
   const failed = runs.filter((r) => FAILED.has(r.conclusion)).length;
@@ -214,7 +264,8 @@ function renderGithub() {
       : 'Nessun repository con push recenti: aggiungine qualcuno nelle impostazioni.'));
   }
   if (g.actionsErrors?.length) parts.push(h('div', { class: 'error', title: g.actionsErrors.join('\n') }, `${g.actionsErrors.length} repository non leggibili (passa sopra per i dettagli)`));
-  parts.push(h('div', { class: 'muted small' }, `${g.autoRepos ? 'Repo con push recenti' : 'Repo monitorati'}: ${(g.watchedRepos || []).join(', ') || '—'}`));
+  const source = { sessions: 'Repo delle sessioni', manual: 'Repo dalle impostazioni', auto: 'Repo con push recenti' }[g.watchSource] || 'Repo monitorati';
+  parts.push(h('div', { class: 'muted small' }, `${source}: ${(g.watchedRepos || []).join(', ') || '—'}`));
   parts.push(h('div', { class: 'section-title' }, `Review richieste (${g.reviews?.length || 0})`));
   parts.push(g.reviews?.length ? h('div', { class: 'list' }, g.reviews.map((x) => githubItem(x, false))) : h('div', { class: 'muted small' }, 'Nessuna PR in attesa della tua review.'));
   parts.push(h('div', { class: 'section-title' }, `Notifiche (${g.notifications?.length || 0})`));
@@ -437,8 +488,6 @@ async function openSettings() {
   const cfg = await aibro.config();
   $('opt-ontop').checked = cfg.alwaysOnTop;
   $('opt-done').checked = cfg.notifyDone;
-  $('opt-collapse').value = cfg.collapseAfterSec;
-  $('opt-edge').value = cfg.collapseEdge;
   $('opt-opacity').value = Math.round(cfg.opacity * 100);
   $('opt-opacity-value').textContent = `${$('opt-opacity').value}%`;
   $('gh-token').placeholder = cfg.hasGithubToken ? 'Token configurato — incollane uno nuovo per sostituirlo' : 'ghp_… / github_pat_…';
@@ -486,13 +535,11 @@ function bind() {
   $('btn-gh-repos').onclick = async () => {
     const saved = await aibro.setConfig({ githubRepos: $('gh-repos').value.split(/[\s,]+/) });
     $('gh-repos').value = saved.join('\n');
-    $('gh-repos-msg').textContent = saved.length ? `Salvati ${saved.length} repository.` : 'Modalità automatica (repo con push recenti).';
+    $('gh-repos-msg').textContent = saved.length ? `Salvati ${saved.length} repository.` : 'Senza sessioni: repo con push recenti.';
   };
   $('btn-gh-clear').onclick =async () => { await aibro.setGithubToken(null); openSettings(); };
   $('opt-ontop').onchange = (e) => aibro.setConfig({ alwaysOnTop: e.target.checked });
   $('opt-done').onchange = (e) => aibro.setConfig({ notifyDone: e.target.checked });
-  $('opt-collapse').onchange = (e) => aibro.setConfig({ collapseAfterSec: e.target.value });
-  $('opt-edge').onchange = (e) => aibro.setConfig({ collapseEdge: e.target.value });
   $('opt-opacity').oninput = (e) => {
     $('opt-opacity-value').textContent = `${e.target.value}%`;
     aibro.setConfig({ opacity: e.target.value / 100 });
@@ -507,11 +554,6 @@ function bind() {
     if (el) { el.scrollIntoView({ block: 'nearest' }); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
   });
   aibro.onOpenSession(openSession);
-  $('dock-handle').onclick = () => aibro.expand();
-  aibro.onCollapsed(({ collapsed, edge }) => {
-    document.body.classList.toggle('collapsed', collapsed);
-    document.body.dataset.edge = edge;
-  });
 
   // I tempi relativi ("3 min") restano aggiornati.
   setInterval(render, 30 * 1000);

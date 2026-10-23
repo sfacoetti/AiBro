@@ -1,0 +1,37 @@
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+.buddy { position: relative; width: 100vw; height: 100vh; cursor: grab; }
+.buddy.dragging { cursor: grabbing; }
+.buddy canvas, .face, .mood, .mood > [data-mood], .eye { position: absolute; inset: 0; width: 100%; height: 100%; }
+.face { pointer-events: none; will-change: transform; }
+.mood > [data-mood] { opacity: 0; transition: opacity .25s ease; }
+.mood > [data-mood].on { opacity: 1; }
+img { -webkit-user-drag: none; }
+
+/* Perplesso (al lavoro, ogni tanto): un occhio si socchiude, sull'altro si alza un sopracciglio storto.
+   Centri degli occhi nelle facce: 28.8% / 69.5% in orizzontale, 44% in verticale. */
+.eye { transition: transform .18s ease; }
+.eye.left { transform-origin: 28.8% 44%; }
+.eye.right { transform-origin: 69.5% 44%; }
+.brow {
+  position: absolute; top: 27%; width: 16%; height: 3.6%; border-radius: 99px;
+  background: #08131f; opacity: 0; transition: opacity .18s ease;
+}
+.eyes[data-squint="left"] .eye.left, .eyes[data-squint="right"] .eye.right { transform: scaleY(.35); }
+/* La posizione segue data-brow, che resta impostato anche dopo: il sopracciglio svanisce dov'è invece di saltare via. */
+.eyes[data-brow="left"] .brow { left: 61.5%; transform: rotate(-12deg); }
+.eyes[data-brow="right"] .brow { left: 20.8%; transform: rotate(12deg); }
+.eyes[data-squint] .brow { opacity: 1; }
+
+/* Al lavoro: al posto della bocca caratteri che cambiano di continuo (centro della bocca nelle facce: 49% / 63%) */
+.chars {
+  position: absolute; left: 49%; top: 63.5%; transform: translate(-50%, -50%);
+  font: 700 14vw/1 "Cascadia Mono", Consolas, monospace; letter-spacing: .02em; white-space: pre;
+  color: #08131f; opacity: 0; transition: opacity .25s ease;
+}
+.buddy[data-mood="work"] .chars { opacity: 1; }
+
+/* Dorme: respiro lento. Chiede qualcosa: un saltello ogni tanto per farsi notare. */
+.buddy[data-mood="nap"] .mood { animation: breathe 4s ease-in-out infinite; }
+.buddy[data-mood="quest"] .mood { animation: hop 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { transform: translateY(1.5%) scaleY(.97); } }
+@keyframes hop { 0%, 60%, 100% { transform: none; } 70% { transform: translateY(-4%); } 80% { transform: translateY(1%); } }

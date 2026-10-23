@@ -6,6 +6,7 @@ const { AgentRunner } = require('./agentRunner');
 const hooksInstaller = require('./hooksInstaller');
 const { scanApps, focusApp } = require('./desktopApps');
 const { fetchGithub, markRead, rerunFailed } = require('./github');
+const git = require('./git');
 const { overlayBadge } = require('./icons');
 const { UsageTracker } = require('./usage');
 const { CONFIG_FILE, APP_ICON, readJson, writeJson } = require('./paths');
@@ -14,17 +15,17 @@ const WIN_W = 380;
 const WIN_H = 600;
 const MIN_W = 320;
 const MIN_H = 360;
-const STRIP = 32; // spessore della finestra contratta (Windows non scende sotto ~30px)
-const EDGES = ['right', 'left', 'top', 'bottom'];
-const COLLAPSE_POLL_MS = 250;
-const COLLAPSE_ANIM_MS = 180;
-const BLUR_COLLAPSE_MS = 400;
-const KEEP_ON_TOP_MS = 1000;
 const APPS_INTERVAL_MS = 10 * 1000;
 const GITHUB_INTERVAL_MS = 60 * 1000;
 const GITHUB_BUSY_INTERVAL_MS = 20 * 1000; // con Actions in corso
 const USAGE_INTERVAL_MS = 30 * 1000;
 const FAILED = new Set(['failure', 'timed_out', 'startup_failure']);
+const LOCAL_REPOS_INTERVAL_MS = 10 * 1000; // git status è locale; il fetch dal remoto ha un suo intervallo in git.js
+const LOCAL_REPOS_MAX = 10;
+const BUDDY_SIZE = 64;
+const BUDDY_DRAG_MS = 16;
+const BUDDY_NAP_MS = 30 * 1000; // sessioni ferme da tanto così: il buddy si addormenta
+const BUDDY_TICK_MS = 1000;
 
 // Modalità riga di comando: npm run hooks:install / hooks:uninstall
 if (process.argv.includes('--install-hooks') || process.argv.includes('--uninstall-hooks')) {
@@ -39,10 +40,12 @@ app.setAppUserModelId('it.in4tek.aibro');
 const store = new Store();
 const runner = new AgentRunner(store);
 const usage = new UsageTracker();
-let config = { collapseAfterSec: 10, collapseEdge: 'right', ...readJson(CONFIG_FILE, { alwaysOnTop: true, notifyDone: true }) };
+let config = readJson(CONFIG_FILE, { alwaysOnTop: true, notifyDone: true });
+// Opzioni della vecchia contrazione sul bordo, sostituita dal buddy.
+for (const k of ['collapseAfterSec', 'collapseEdge', 'collapsedOpacity']) delete config[k];
 const clampOpacity = (v) => Math.min(1, Math.max(0.3, Number(v) || 1));
-const clampDelay = (v) => Math.min(3600, Math.max(0, Math.round(Number(v) || 0)));
 let win = null;
+let buddy = null;
 let tray = null;
 let hookServer = null;
 let quitting = false;
@@ -102,98 +105,128 @@ function createWindow() {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
-  const remember = () => { if (dock.collapsed || dock.anim) return; config.bounds = win.getContentBounds(); saveConfig(); };
+  const remember = () => { config.bounds = win.getContentBounds(); saveConfig(); };
   win.on('moved', remember);
   win.on('resized', remember);
   win.on('close', (e) => { if (!quitting) { e.preventDefault(); win.hide(); } });
-  // Finita in secondo piano (clic su un'altra finestra): si contrae subito. La breve attesa ignora i passaggi
-  // di focus momentanei, ad esempio verso una notifica.
-  win.on('blur', () => setTimeout(() => { if (!win.isFocused() && canCollapse()) collapseWindow(); }, BLUR_COLLAPSE_MS));
 }
 
 function showWindow(focus = true) {
   if (!win) return;
   if (win.isMinimized()) win.restore();
-  if (dock.collapsed) expandWindow();
-  dock.idleSince = Date.now();
   if (focus) { win.show(); win.focus(); } else win.showInactive();
-}
-
-// ---------- Contrazione sul bordo ----------
-// Dopo collapseAfterSec senza mouse sopra né focus la finestra si contrae sul posto verso il lato scelto,
-// lasciando una striscia su quel lato; cliccandola torna esattamente dov'era.
-// Restando sul proprio monitor non attraversa schermi con DPI diversi.
-
-const dock = { collapsed: false, anim: null, full: null, edge: 'right', idleSince: Date.now() };
-
-function animateBounds(to, done) {
-  clearInterval(dock.anim);
-  const from = win.getContentBounds();
-  const start = Date.now();
-  dock.anim = setInterval(() => {
-    const k = Math.min(1, (Date.now() - start) / COLLAPSE_ANIM_MS);
-    const e = 1 - (1 - k) ** 3;
-    const lerp = (a, b) => Math.round(a + (b - a) * e);
-    win.setContentBounds({ x: lerp(from.x, to.x), y: lerp(from.y, to.y), width: lerp(from.width, to.width), height: lerp(from.height, to.height) });
-    if (k === 1) { clearInterval(dock.anim); dock.anim = null; done?.(); }
-  }, 15);
-}
-
-function stripBounds(b, edge) {
-  if (edge === 'left') return { x: b.x, y: b.y, width: STRIP, height: b.height };
-  if (edge === 'top') return { x: b.x, y: b.y, width: b.width, height: STRIP };
-  if (edge === 'bottom') return { x: b.x, y: b.y + b.height - STRIP, width: b.width, height: STRIP };
-  return { x: b.x + b.width - STRIP, y: b.y, width: STRIP, height: b.height };
-}
-
-function collapseWindow() {
-  const edge = EDGES.includes(config.collapseEdge) ? config.collapseEdge : 'right';
-  dock.full = win.getContentBounds();
-  dock.collapsed = true;
-  dock.edge = edge;
-  win.setMinimumSize(1, 1);
-  win.setResizable(false);
-  win.setAlwaysOnTop(true, 'screen-saver'); // la striscia resta sopra a tutto, anche ad altre finestre in primo piano
-  win.webContents.send('collapsed', { collapsed: true, edge });
-  animateBounds(stripBounds(dock.full, edge));
-}
-
-function expandWindow() {
-  const target = dock.full;
-  dock.collapsed = false;
-  dock.idleSince = Date.now();
-  win.webContents.send('collapsed', { collapsed: false, edge: dock.edge });
-  animateBounds(target, () => {
-    win.setResizable(true);
-    win.setMinimumSize(MIN_W, MIN_H);
-    win.setAlwaysOnTop(config.alwaysOnTop);
-    config.bounds = target;
-    saveConfig();
-  });
-}
-
-// Resta aperta finché ci sono approvazioni in attesa o una finestra di dialogo di AiBro aperta.
-function canCollapse() {
-  return win.isVisible() && !dock.collapsed && !dock.anim && !dock.dialog && config.collapseAfterSec > 0 && !store.approvals.size;
-}
-
-function tickDock() {
-  if (!win || !win.isVisible() || dock.anim) return;
-  if (dock.collapsed) {
-    // Un'altra finestra "sempre in primo piano" attivata dopo può coprirla: la riporta sopra.
-    if (Date.now() - (dock.raisedAt || 0) >= KEEP_ON_TOP_MS) { dock.raisedAt = Date.now(); win.moveTop(); }
-    return;
-  }
-  const p = screen.getCursorScreenPoint();
-  const b = win.getContentBounds();
-  const over = p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height;
-  if (!canCollapse() || over || win.isFocused()) { dock.idleSince = Date.now(); return; }
-  if (Date.now() - dock.idleSince >= config.collapseAfterSec * 1000) collapseWindow();
 }
 
 function toggleWindow() {
   if (win.isVisible() && win.isFocused()) win.hide();
   else showWindow();
+}
+
+// ---------- Buddy ----------
+// La bolla trasparente sempre in primo piano che sostituisce la finestra all'avvio: si trascina col tasto sinistro,
+// col destro apre la finestra. L'espressione riassume lo stato delle sessioni.
+
+const mood = { current: 'neutro', busyAt: Date.now(), done: null, pokedAt: 0 };
+
+function defaultBuddyPos() {
+  const wa = screen.getPrimaryDisplay().workArea;
+  return { x: wa.x + wa.width - BUDDY_SIZE - 24, y: wa.y + wa.height - BUDDY_SIZE - 24 };
+}
+
+function createBuddy() {
+  const saved = config.buddyPos;
+  const pos = saved && boundsOnScreen({ ...saved, width: BUDDY_SIZE, height: BUDDY_SIZE }) ? saved : defaultBuddyPos();
+  buddy = new BrowserWindow({
+    ...pos,
+    width: BUDDY_SIZE,
+    height: BUDDY_SIZE,
+    useContentSize: true,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    focusable: false, // non ruba il focus alle altre finestre quando lo si tocca
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    title: 'AiBro',
+    icon: APP_ICON,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  });
+  buddy.setAlwaysOnTop(true, 'floating');
+  buddy.loadFile(path.join(__dirname, '..', 'ui', 'buddy.html'));
+  buddy.webContents.on('will-navigate', (e) => e.preventDefault());
+  buddy.on('close', (e) => { if (!quitting) e.preventDefault(); });
+  buddy.once('ready-to-show', () => buddy.showInactive());
+}
+
+// quest: qualcuno aspetta l'utente. work: una sessione sta lavorando. neutro: appena finito senza successo, o a riposo.
+// happy: l'ultima sessione ha finito bene. nap: tutto fermo da più di BUDDY_NAP_MS.
+function computeMood() {
+  const now = Date.now();
+  const live = [...store.sessions.values()].filter((s) => s.status !== 'ended');
+  // idle_prompt arriva quando una sessione finita resta ferma: non è una domanda, è riposo.
+  const asking = store.approvals.size || live.some((s) => s.status === 'waiting'
+    || (s.status === 'waiting-input' && s.inputKind !== 'idle_prompt')
+    || (s.status === 'running' && /^AskUserQuestion\b/.test(s.activity || '')));
+  if (asking) { mood.busyAt = now; return 'quest'; }
+  if (live.some((s) => s.status === 'running')) { mood.busyAt = now; return 'work'; }
+  const quietSince = Math.max(mood.busyAt, mood.done?.at || 0, mood.pokedAt);
+  if (now - quietSince >= BUDDY_NAP_MS) return 'nap';
+  return mood.done?.ok && mood.done.at >= mood.busyAt ? 'happy' : 'neutro';
+}
+
+function updateMood() {
+  const m = computeMood();
+  if (m === mood.current) return;
+  mood.current = m;
+  buddy?.webContents.send('buddy-mood', m);
+}
+
+// Il trascinamento segue il cursore dal processo principale: funziona anche tra monitor con DPI diversi.
+const drag = { timer: null, offset: null, last: null };
+
+function startBuddyDrag() {
+  stopBuddyDrag();
+  const p = screen.getCursorScreenPoint();
+  const [x, y] = buddy.getPosition();
+  drag.offset = { x: p.x - x, y: p.y - y };
+  drag.last = { ...p, t: Date.now() };
+  drag.v = { x: 0, y: 0 };
+  // Toccarlo lo sveglia (da sveglio non torna felice per una sessione finita prima del sonnellino).
+  if (mood.current === 'nap') mood.done = null;
+  mood.pokedAt = Date.now();
+  updateMood();
+  drag.timer = setInterval(() => {
+    const c = screen.getCursorScreenPoint();
+    const now = Date.now();
+    const dt = Math.max(1, now - drag.last.t) / 1000;
+    const moved = c.x !== drag.last.x || c.y !== drag.last.y;
+    // Velocità smorzata: tra due letture il cursore spesso non si è mosso.
+    drag.v.x = drag.v.x * 0.7 + ((c.x - drag.last.x) / dt) * 0.3;
+    drag.v.y = drag.v.y * 0.7 + ((c.y - drag.last.y) / dt) * 0.3;
+    drag.last = { ...c, t: now };
+    if (moved) buddy.setBounds({ x: c.x - drag.offset.x, y: c.y - drag.offset.y, width: BUDDY_SIZE, height: BUDDY_SIZE });
+    buddy.webContents.send('buddy-motion', { vx: drag.v.x, vy: drag.v.y, moving: true });
+  }, BUDDY_DRAG_MS);
+}
+
+function stopBuddyDrag() {
+  if (!drag.timer) return;
+  clearInterval(drag.timer);
+  drag.timer = null;
+  buddy.webContents.send('buddy-motion', { vx: 0, vy: 0, moving: false });
+  const [x, y] = buddy.getPosition();
+  config.buddyPos = { x, y };
+  saveConfig();
+  mood.pokedAt = Date.now();
 }
 
 // ---------- Tray ----------
@@ -247,7 +280,7 @@ function buildTrayMenu() {
       : { label: 'Installa hook di Claude Code', click: () => { store.hooks = hooksInstaller.install(); store.changed(); } },
     {
       label: 'Sempre in primo piano', type: 'checkbox', checked: config.alwaysOnTop,
-      click: (i) => { config.alwaysOnTop = i.checked; win.setAlwaysOnTop(i.checked || dock.collapsed); saveConfig(); },
+      click: (i) => { config.alwaysOnTop = i.checked; win.setAlwaysOnTop(i.checked); saveConfig(); },
     },
     {
       label: 'Avvia con Windows', type: 'checkbox', checked: login,
@@ -278,23 +311,27 @@ function sessionTitle(id) {
   return store.sessions.get(id)?.title || 'Sessione';
 }
 
+// La finestra non si apre più da sola: lo stato lo mostra il buddy, la notifica porta alla finestra.
 store.on('attention', (ev) => {
   if (ev.kind === 'approval') {
-    // Una richiesta di approvazione apre subito il popup.
-    showWindow();
-    win.flashFrame(true);
-    win.webContents.send('focus-approval', ev.approvalId);
-    notify(`Approvazione richiesta · ${sessionTitle(ev.sessionId)}`, `Vuole usare ${ev.tool}`);
+    if (win.isVisible()) win.webContents.send('focus-approval', ev.approvalId);
+    notify(`Approvazione richiesta · ${sessionTitle(ev.sessionId)}`, `Vuole usare ${ev.tool}`, () => win.webContents.send('focus-approval', ev.approvalId));
   } else if (ev.kind === 'input') {
-    showWindow(false);
     notify(`${sessionTitle(ev.sessionId)} attende una risposta`, ev.message);
-  } else if (ev.kind === 'done' && config.notifyDone && !(win.isVisible() && win.isFocused())) {
-    notify(`${sessionTitle(ev.sessionId)} ha finito`, ev.message, () => win.webContents.send('open-session', ev.sessionId));
+  } else if (ev.kind === 'done') {
+    mood.done = { at: Date.now(), ok: !!ev.ok };
+    refreshLocalRepos(); // a fine turno l'agente ha spesso appena modificato o committato
+    if (config.notifyDone && !(win.isVisible() && win.isFocused())) {
+      notify(`${sessionTitle(ev.sessionId)} ha finito`, ev.message, () => win.webContents.send('open-session', ev.sessionId));
+    }
   }
+  updateMood();
 });
 
 store.on('change', () => {
   updateTray();
+  updateMood();
+  checkSessionRepos();
   win?.webContents.send('state', store.snapshot());
 });
 
@@ -342,11 +379,56 @@ function scheduleGithub() {
   githubTimer = setTimeout(refreshGithub, busy ? GITHUB_BUSY_INTERVAL_MS : GITHUB_INTERVAL_MS);
 }
 
+// Repo GitHub delle cartelle delle sessioni, dalla più recente. Comprende le sessioni appena terminate:
+// le Actions partono spesso dopo il push finale.
+async function sessionRepos() {
+  const cwds = [...new Set([...store.sessions.values()].sort((a, b) => b.updatedAt - a.updatedAt).map((s) => s.cwd).filter(Boolean))];
+  const repos = await Promise.all(cwds.map(git.githubRepoOf));
+  return [...new Set(repos.filter(Boolean))];
+}
+
+// Stato git delle cartelle delle sessioni (raggruppate per repository): cosa c'è da committare, pushare, scaricare.
+const localPoll = { busy: false, last: '' };
+
+async function refreshLocalRepos() {
+  if (localPoll.busy) return;
+  localPoll.busy = true;
+  try {
+    const sessions = [...store.sessions.values()].filter((s) => s.cwd).sort((a, b) => b.updatedAt - a.updatedAt);
+    const byRoot = new Map();
+    for (const s of sessions) {
+      const root = await git.repoRoot(s.cwd);
+      if (!root) continue;
+      if (!byRoot.has(root)) byRoot.set(root, { cwd: s.cwd, sessions: [] });
+      byRoot.get(root).sessions.push(s.title || path.basename(s.cwd));
+    }
+    const repos = await Promise.all([...byRoot].slice(0, LOCAL_REPOS_MAX).map(async ([root, { cwd, sessions: titles }]) => {
+      const base = { path: root, name: path.basename(root), github: await git.githubRepoOf(cwd), sessions: [...new Set(titles)] };
+      try { return { ...base, ...(await git.repoStatus(root)) }; } catch (e) { return { ...base, error: e.message }; }
+    }));
+    const json = JSON.stringify(repos);
+    if (json !== localPoll.last) { localPoll.last = json; store.localRepos = repos; store.changed(); }
+  } finally {
+    localPoll.busy = false;
+  }
+}
+
+// Una sessione in un repo nuovo aggiorna subito le Actions invece di aspettare il prossimo giro.
+const githubPoll = { busy: false, sessionRepos: '' }; // sessionRepos: quelli usati nell'ultimo aggiornamento
+
+async function checkSessionRepos() {
+  if (githubPoll.busy || !store.github.configured) return;
+  if ((await sessionRepos()).join() !== githubPoll.sessionRepos) refreshGithub();
+}
+
 async function refreshGithub() {
   const token = githubToken();
   if (!token) { store.github = { ...store.github, configured: false }; store.changed(); scheduleGithub(); return; }
+  githubPoll.busy = true;
   try {
-    const data = await fetchGithub(token, { repos: config.githubRepos || [] });
+    const repos = await sessionRepos();
+    githubPoll.sessionRepos = repos.join();
+    const data = await fetchGithub(token, { repos: config.githubRepos || [], sessionRepos: repos });
     const fresh = [...data.notifications, ...data.reviews].filter((x) => !seenGithub.has(x.id));
     const firstRun = !store.github.updatedAt;
     fresh.forEach((x) => seenGithub.add(x.id));
@@ -357,6 +439,8 @@ async function refreshGithub() {
     }
   } catch (e) {
     store.github = { ...store.github, configured: true, error: e.message };
+  } finally {
+    githubPoll.busy = false;
   }
   store.changed();
   scheduleGithub();
@@ -370,17 +454,13 @@ function registerIpc() {
     alwaysOnTop: config.alwaysOnTop,
     notifyDone: config.notifyDone,
     opacity: clampOpacity(config.opacity),
-    collapseAfterSec: config.collapseAfterSec,
-    collapseEdge: config.collapseEdge,
     hasGithubToken: !!githubToken(),
     githubRepos: config.githubRepos || [],
   }));
   ipcMain.handle('config:set', (_e, patch) => {
-    if ('alwaysOnTop' in patch) { config.alwaysOnTop = !!patch.alwaysOnTop; win.setAlwaysOnTop(config.alwaysOnTop || dock.collapsed); }
+    if ('alwaysOnTop' in patch) { config.alwaysOnTop = !!patch.alwaysOnTop; win.setAlwaysOnTop(config.alwaysOnTop); }
     if ('notifyDone' in patch) config.notifyDone = !!patch.notifyDone;
     if ('opacity' in patch) { config.opacity = clampOpacity(patch.opacity); win.setOpacity(config.opacity); }
-    if ('collapseAfterSec' in patch) { config.collapseAfterSec = clampDelay(patch.collapseAfterSec); dock.idleSince = Date.now(); }
-    if ('collapseEdge' in patch && EDGES.includes(patch.collapseEdge)) config.collapseEdge = patch.collapseEdge;
     if ('githubRepos' in patch) {
       config.githubRepos = [...new Set((patch.githubRepos || []).map((r) => r.trim()).filter((r) => /^[\w.-]+\/[\w.-]+$/.test(r)))];
       refreshGithub();
@@ -414,13 +494,8 @@ function registerIpc() {
   ipcMain.handle('session:resume', (_e, { sessionId, cwd, prompt, title }) => runner.start({ resumeId: sessionId, cwd, prompt, title }));
   ipcMain.handle('sessions:recent', () => runner.recentSessions());
   ipcMain.handle('pick-folder', async () => {
-    dock.dialog = true; // il dialogo prende il focus: la finestra non deve contrarsi
-    try {
-      const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
-      return r.canceled ? null : r.filePaths[0];
-    } finally {
-      dock.dialog = false;
-    }
+    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
+    return r.canceled ? null : r.filePaths[0];
   });
 
   ipcMain.handle('apps:focus', (_e, pid) => focusApp(pid));
@@ -454,13 +529,28 @@ function registerIpc() {
     await rerunFailed(token, repo, runId);
     setTimeout(refreshGithub, 3000);
   });
+  const localRepo = (root) => {
+    if (!store.localRepos.some((r) => r.path === root)) throw new Error('Repository non monitorato');
+    return root;
+  };
+  const afterGit = async () => { await refreshLocalRepos(); setTimeout(refreshGithub, 3000); };
+  ipcMain.handle('git:push', async (_e, root) => { await git.push(localRepo(root)); await afterGit(); });
+  ipcMain.handle('git:pull', async (_e, root) => { await git.pull(localRepo(root)); await afterGit(); });
+  ipcMain.handle('git:open-folder', (_e, root) => shell.openPath(localRepo(root)));
   ipcMain.handle('open-url',(_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });
 
   ipcMain.handle('hooks:install', () => { store.hooks = hooksInstaller.install(); store.changed(); return store.hooks; });
   ipcMain.handle('hooks:uninstall', () => { store.hooks = hooksInstaller.uninstall(); store.changed(); return store.hooks; });
 
   ipcMain.handle('window:hide', () => win.hide());
-  ipcMain.handle('window:expand', () => { if (dock.collapsed) expandWindow(); });
+
+  ipcMain.handle('buddy:open', () => showWindow());
+  // Doppio clic: chiude la finestra aperta, altrimenti la apre.
+  ipcMain.handle('buddy:toggle', () => { if (win.isVisible()) win.hide(); else showWindow(); });
+  ipcMain.handle('buddy:mood', () => mood.current);
+  ipcMain.handle('buddy:drag', (_e, on) => (on ? startBuddyDrag() : stopBuddyDrag()));
+  // Gli angoli trasparenti della finestra quadrata lasciano passare i clic; i movimenti arrivano comunque.
+  ipcMain.handle('buddy:ignore-mouse', (_e, ignore) => buddy.setIgnoreMouseEvents(!!ignore, { forward: true }));
 }
 
 // ---------- Avvio ----------
@@ -476,15 +566,18 @@ app.whenReady().then(async () => {
   try { store.hooks = hooksInstaller.refresh(); } catch (e) { console.error('hook', e.message); store.hooks = hooksInstaller.status(); }
   registerIpc();
   createWindow();
+  createBuddy();
   createTray();
-  win.once('ready-to-show', () => { if (!process.argv.includes('--hidden')) showWindow(); });
+  mood.current = computeMood();
+  setInterval(updateMood, BUDDY_TICK_MS);
 
   refreshApps();
   refreshGithub();
   refreshUsage();
   setInterval(refreshApps, APPS_INTERVAL_MS);
   setInterval(refreshUsage, USAGE_INTERVAL_MS);
-  setInterval(tickDock, COLLAPSE_POLL_MS);
+  refreshLocalRepos();
+  setInterval(refreshLocalRepos, LOCAL_REPOS_INTERVAL_MS);
   setInterval(() => store.pruneEnded(), 60 * 1000);
 });
 

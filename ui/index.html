@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="titlebar">
-    <div class="brand"><span class="logo"></span>AiBro</div>
+    <div class="brand"><img class="logo" src="logo.png" alt="">AiBro</div>
     <div class="summary" id="summary"></div>
     <div class="win-actions">
       <button class="icon-btn" id="btn-settings" title="Impostazioni">⚙</button>
@@ -97,23 +97,13 @@
         <button class="ghost" id="btn-gh-save">Salva</button>
       </div>
       <button class="link" id="btn-gh-clear">Rimuovi token</button>
-      <label>Repository da monitorare per le Actions (owner/repo, uno per riga). Vuoto = i tuoi repo con push negli ultimi 7 giorni.</label>
+      <label>Le Actions seguono i repository GitHub delle cartelle in cui lavorano le sessioni. Quando non ci sono sessioni: questi repository (owner/repo, uno per riga), oppure, se vuoto, i tuoi repo con push negli ultimi 7 giorni.</label>
       <textarea id="gh-repos" rows="3" placeholder="in4tek/progetto&#10;in4tek/altro-repo"></textarea>
       <div class="row"><span class="muted small" id="gh-repos-msg"></span><button class="ghost" id="btn-gh-repos">Salva repository</button></div>
 
       <h3>Finestra</h3>
       <label class="check"><input type="checkbox" id="opt-ontop"> Sempre in primo piano</label>
       <label class="check"><input type="checkbox" id="opt-done"> Notifica quando una sessione finisce</label>
-      <label for="opt-collapse">Contrai dopo (secondi senza interazione, 0 = mai) verso il lato</label>
-      <div class="row">
-        <input type="number" id="opt-collapse" min="0" max="3600" step="1">
-        <select id="opt-edge">
-          <option value="right">Destro</option>
-          <option value="left">Sinistro</option>
-          <option value="top">Superiore</option>
-          <option value="bottom">Inferiore</option>
-        </select>
-      </div>
       <label for="opt-opacity">Opacità</label>
       <div class="row">
         <input type="range" id="opt-opacity" min="30" max="100" step="5">
@@ -121,12 +111,6 @@
       </div>
     </div>
   </main>
-
-  <button class="dock-handle" id="dock-handle" title="Espandi AiBro">
-    <svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
-    <svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
-    <svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
-  </button>
 
   <script src="app.js"></script>
 </body>

@@ -8,6 +8,8 @@
     "start": "electron .",
     "hooks:install": "electron . --install-hooks",
     "hooks:uninstall": "electron . --uninstall-hooks",
+    "buddy": "electron scripts/make-buddy.js",
+    "icon": "electron scripts/make-icon.js",
     "dist": "electron scripts/make-icon.js && electron-builder --win"
   },
   "author": "Stefano Facoetti",
@@ -31,7 +33,7 @@
       "src/**",
       "ui/**",
       "hooks/**",
-      "aibro.ico",
+      "aibro_orange.ico",
       "package.json",
       "!node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**"
     ],

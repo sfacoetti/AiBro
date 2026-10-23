@@ -35,13 +35,14 @@ function handleEvent(store, event, p, req, res) {
       const s = store.upsertSession(id, base);
       if (/idle|input/i.test(p.notification_type || '')) {
         s.status = 'waiting-input';
+        s.inputKind = p.notification_type;
         store.emit('attention', { kind: 'input', sessionId: id, message: p.message });
       }
       break;
     }
     case 'Stop':
       store.upsertSession(id, { ...base, status: 'idle', activity: null, lastMessage: p.last_assistant_message || null });
-      store.emit('attention', { kind: 'done', sessionId: id, message: p.last_assistant_message });
+      store.emit('attention', { kind: 'done', sessionId: id, message: p.last_assistant_message, ok: true });
       break;
     case 'SessionEnd':
       store.upsertSession(id, { status: 'ended', activity: null });

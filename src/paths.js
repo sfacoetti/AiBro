@@ -12,7 +12,7 @@ const CLAUDE_SETTINGS = path.join(os.homedir(), '.claude', 'settings.json');
 const HOOK_SOURCE = path.join(__dirname, '..', 'hooks', 'aibro-hook.js');
 const HOOK_SCRIPT = path.join(DATA_DIR, 'aibro-hook.js');
 const DEFAULT_PORT = 47821;
-const APP_ICON = path.join(__dirname, '..', 'aibro.ico');
+const APP_ICON = path.join(__dirname, '..', 'aibro_orange.ico'); // copia arancione di aibro.ico (npm run icon)
 
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });

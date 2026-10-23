@@ -173,7 +173,7 @@ class AgentRunner {
           costUsd: (s?.costUsd || 0) + (m.total_cost_usd || 0),
         });
         if (m.subtype !== 'success') this.addMessage(id, { role: 'error', text: `Turno terminato: ${m.subtype}` });
-        this.store.emit('attention', { kind: 'done', sessionId: id, message: s?.lastMessage });
+        this.store.emit('attention', { kind: 'done', sessionId: id, message: s?.lastMessage, ok: m.subtype === 'success' && !m.is_error });
       }
     }
   }
