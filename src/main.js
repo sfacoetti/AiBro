@@ -6,9 +6,9 @@ const { AgentRunner } = require('./agentRunner');
 const hooksInstaller = require('./hooksInstaller');
 const { scanApps, focusApp } = require('./desktopApps');
 const { fetchGithub, markRead, rerunFailed } = require('./github');
-const { trayIcon } = require('./icons');
+const { overlayBadge } = require('./icons');
 const { UsageTracker } = require('./usage');
-const { CONFIG_FILE, readJson, writeJson } = require('./paths');
+const { CONFIG_FILE, APP_ICON, readJson, writeJson } = require('./paths');
 
 const WIN_W = 380;
 const WIN_H = 600;
@@ -87,6 +87,7 @@ function createWindow() {
     opacity: clampOpacity(config.opacity),
     backgroundColor: '#16161a',
     title: 'AiBro',
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -197,13 +198,18 @@ function toggleWindow() {
 
 // ---------- Tray ----------
 
+// Icona dell'app (aibro.ico) con il badge di stato, per ogni scala DPI comune.
 const ICONS = {};
 function icon(kind) {
   if (!ICONS[kind]) {
     const badge = { approval: [245, 158, 11], input: [59, 130, 246], failure: [239, 68, 68], github: [148, 163, 184] }[kind] || null;
+    const base = nativeImage.createFromPath(APP_ICON);
     const img = nativeImage.createEmpty();
-    for (const scale of [1, 1.5, 2]) {
-      img.addRepresentation({ scaleFactor: scale, buffer: trayIcon(Math.round(16 * scale), { badge }) });
+    for (const scale of [1, 1.25, 1.5, 2]) {
+      const size = Math.round(16 * scale);
+      let frame = base.resize({ width: size, height: size, quality: 'best' });
+      if (badge) frame = nativeImage.createFromBitmap(overlayBadge(frame.toBitmap(), size, badge), { width: size, height: size });
+      img.addRepresentation({ scaleFactor: scale, buffer: frame.toPNG() });
     }
     ICONS[kind] = img;
   }
@@ -263,7 +269,7 @@ function createTray() {
 
 function notify(title, body, onClick) {
   if (!Notification.isSupported()) return;
-  const n = new Notification({ title, body: (body || '').slice(0, 240), silent: false });
+  const n = new Notification({ title, body: (body || '').slice(0, 240), silent: false, icon: APP_ICON });
   n.on('click', () => { showWindow(); onClick?.(); });
   n.show();
 }

@@ -12,6 +12,7 @@ const CLAUDE_SETTINGS = path.join(os.homedir(), '.claude', 'settings.json');
 const HOOK_SOURCE = path.join(__dirname, '..', 'hooks', 'aibro-hook.js');
 const HOOK_SCRIPT = path.join(DATA_DIR, 'aibro-hook.js');
 const DEFAULT_PORT = 47821;
+const APP_ICON = path.join(__dirname, '..', 'aibro.ico');
 
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -38,6 +39,6 @@ function writeJson(file, data) {
 }
 
 module.exports = {
-  DATA_DIR, RUNTIME_FILE, CONFIG_FILE, CLAUDE_SETTINGS, HOOK_SOURCE, HOOK_SCRIPT, DEFAULT_PORT,
+  DATA_DIR, RUNTIME_FILE, CONFIG_FILE, CLAUDE_SETTINGS, HOOK_SOURCE, HOOK_SCRIPT, DEFAULT_PORT, APP_ICON,
   ensureDataDir, writeRuntime, clearRuntime, readJson, writeJson,
 };

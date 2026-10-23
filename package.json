@@ -8,7 +8,7 @@
     "start": "electron .",
     "hooks:install": "electron . --install-hooks",
     "hooks:uninstall": "electron . --uninstall-hooks",
-    "dist": "node scripts/make-icon.js && electron-builder --win"
+    "dist": "electron scripts/make-icon.js && electron-builder --win"
   },
   "author": "Stefano Facoetti",
   "license": "GPL-3.0-only",
@@ -31,6 +31,7 @@
       "src/**",
       "ui/**",
       "hooks/**",
+      "aibro.ico",
       "package.json",
       "!node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**"
     ],
@@ -40,7 +41,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": true,
