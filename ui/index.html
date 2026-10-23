@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <title>AiBro</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand"><span class="logo"></span>AiBro</div>
+    <div class="summary" id="summary"></div>
+    <div class="win-actions">
+      <button class="icon-btn" id="btn-settings" title="Impostazioni">⚙</button>
+      <button class="icon-btn" id="btn-hide" title="Nascondi nella taskbar">✕</button>
+    </div>
+  </header>
+
+  <section id="approvals" class="approvals"></section>
+
+  <main id="view-main">
+    <nav class="tabs">
+      <button data-tab="sessions" class="active">Sessioni <span class="count" id="count-sessions"></span></button>
+      <button data-tab="github">GitHub <span class="count" id="count-github"></span></button>
+      <button data-tab="apps">App <span class="count" id="count-apps"></span></button>
+      <button data-tab="usage">Consumi <span class="count" id="count-usage"></span></button>
+    </nav>
+    <div class="tab-body" id="tab-sessions"></div>
+    <div class="tab-body hidden" id="tab-github"></div>
+    <div class="tab-body hidden" id="tab-apps"></div>
+    <div class="tab-body hidden" id="tab-usage"></div>
+  </main>
+
+  <main id="view-session" class="hidden">
+    <div class="subbar">
+      <button class="icon-btn" id="btn-back" title="Indietro">←</button>
+      <span class="dot" id="sess-dot"></span>
+      <div class="subbar-title">
+        <div id="sess-title"></div>
+        <div class="muted small" id="sess-sub"></div>
+      </div>
+      <button class="ghost small" id="btn-interrupt" title="Interrompi il turno corrente">Stop</button>
+      <button class="ghost small" id="btn-close-sess" title="Chiudi sessione">Chiudi</button>
+    </div>
+    <div class="messages" id="messages"></div>
+    <div class="composer" id="composer">
+      <div class="note hidden" id="resume-note">Sessione aperta nel terminale. Se scrivi qui la conversazione prosegue in AiBro: il terminale non vedrà i nuovi messaggi.</div>
+      <div class="row">
+        <textarea id="input" rows="2" placeholder="Scrivi alla sessione… (Invio per inviare)"></textarea>
+        <button class="primary" id="btn-send">Invia</button>
+      </div>
+    </div>
+  </main>
+
+  <main id="view-new" class="hidden">
+    <div class="subbar">
+      <button class="icon-btn" data-back title="Indietro">←</button>
+      <div class="subbar-title">Nuova sessione Claude Code</div>
+    </div>
+    <div class="form">
+      <label>Cartella di lavoro</label>
+      <div class="row">
+        <input id="new-cwd" placeholder="C:\percorso\progetto">
+        <button class="ghost" id="btn-pick">Sfoglia</button>
+      </div>
+      <label>Modalità permessi</label>
+      <select id="new-mode">
+        <option value="default">Chiedi approvazione (consigliato)</option>
+        <option value="acceptEdits">Accetta modifiche ai file</option>
+        <option value="plan">Solo pianificazione</option>
+        <option value="auto">Auto</option>
+      </select>
+      <label>Primo messaggio</label>
+      <textarea id="new-prompt" rows="4" placeholder="Cosa deve fare Claude?"></textarea>
+      <button class="primary" id="btn-start">Avvia</button>
+      <div class="error" id="new-error"></div>
+
+      <h3>Riprendi una sessione recente</h3>
+      <div id="recent" class="list"><div class="muted small">Caricamento…</div></div>
+    </div>
+  </main>
+
+  <main id="view-settings" class="hidden">
+    <div class="subbar">
+      <button class="icon-btn" data-back title="Indietro">←</button>
+      <div class="subbar-title">Impostazioni</div>
+    </div>
+    <div class="form">
+      <h3>Claude Code</h3>
+      <p class="muted small">Gli hook inviano a AiBro lo stato delle sessioni aperte nel terminale e le richieste di permesso. Vengono aggiunti a <code>~/.claude/settings.json</code> (con backup) e, se AiBro è chiuso, Claude Code chiede nel terminale come al solito.</p>
+      <div class="row"><span id="hooks-status"></span><button class="ghost" id="btn-hooks"></button></div>
+
+      <h3>GitHub</h3>
+      <p class="muted small">Personal access token (classic con scope <code>notifications</code>, <code>repo</code> e <code>workflow</code>, oppure fine-grained con Actions in lettura/scrittura per poter rilanciare i job). Viene salvato cifrato con DPAPI di Windows.</p>
+      <div class="row">
+        <input id="gh-token" type="password" placeholder="ghp_… / github_pat_…">
+        <button class="ghost" id="btn-gh-save">Salva</button>
+      </div>
+      <button class="link" id="btn-gh-clear">Rimuovi token</button>
+      <label>Repository da monitorare per le Actions (owner/repo, uno per riga). Vuoto = i tuoi repo con push negli ultimi 7 giorni.</label>
+      <textarea id="gh-repos" rows="3" placeholder="in4tek/progetto&#10;in4tek/altro-repo"></textarea>
+      <div class="row"><span class="muted small" id="gh-repos-msg"></span><button class="ghost" id="btn-gh-repos">Salva repository</button></div>
+
+      <h3>Finestra</h3>
+      <label class="check"><input type="checkbox" id="opt-ontop"> Sempre in primo piano</label>
+      <label class="check"><input type="checkbox" id="opt-done"> Notifica quando una sessione finisce</label>
+      <label for="opt-collapse">Contrai dopo (secondi senza interazione, 0 = mai) verso il lato</label>
+      <div class="row">
+        <input type="number" id="opt-collapse" min="0" max="3600" step="1">
+        <select id="opt-edge">
+          <option value="right">Destro</option>
+          <option value="left">Sinistro</option>
+          <option value="top">Superiore</option>
+          <option value="bottom">Inferiore</option>
+        </select>
+      </div>
+      <label for="opt-opacity">Opacità</label>
+      <div class="row">
+        <input type="range" id="opt-opacity" min="30" max="100" step="5">
+        <span class="range-value" id="opt-opacity-value"></span>
+      </div>
+    </div>
+  </main>
+
+  <button class="dock-handle" id="dock-handle" title="Espandi AiBro">
+    <svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
+    <svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
+    <svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
+  </button>
+
+  <script src="app.js"></script>
+</body>
+</html>
