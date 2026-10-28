@@ -86,6 +86,14 @@ aibro.onBuddyMotion(({ vx, vy, moving }) => {
   wake();
 });
 
+aibro.onBuddyGlow(() => {
+  const glow = $('glow');
+  glow.classList.remove('on');
+  void glow.offsetWidth; // riavvia l'animazione se arriva un'altra sessione finita mentre brilla
+  glow.classList.add('on');
+});
+$('glow').addEventListener('animationend', (e) => e.target.classList.remove('on'));
+
 const GLYPHS = '01';
 const CHARS_LEN = 3;
 const CHARS_MS = 110;

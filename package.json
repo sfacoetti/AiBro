@@ -33,7 +33,7 @@
       "src/**",
       "ui/**",
       "hooks/**",
-      "aibro_orange.ico",
+      "build/icon-256.ico",
       "package.json",
       "!node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**"
     ],
@@ -43,7 +43,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/exe.ico"
     },
     "nsis": {
       "oneClick": true,

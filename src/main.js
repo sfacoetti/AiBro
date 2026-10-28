@@ -229,9 +229,33 @@ function stopBuddyDrag() {
   mood.pokedAt = Date.now();
 }
 
+// Saltelli sul posto quando una sessione finisce: l'acqua e la faccia seguono come nel trascinamento.
+const HOP = { count: 3, ms: 380, height: 22 };
+let hopTimer = null;
+
+function buddyHop() {
+  if (!buddy || drag.timer || hopTimer) return;
+  const [x, y] = buddy.getPosition();
+  const start = Date.now();
+  let prev = 0;
+  hopTimer = setInterval(() => {
+    const t = (Date.now() - start) / HOP.ms;
+    const end = t >= HOP.count || drag.timer;
+    // Parabola per ogni saltello, ognuno più basso del precedente.
+    const p = t % 1;
+    const dy = end ? 0 : Math.round(4 * p * (1 - p) * HOP.height * (1 - Math.floor(t) / HOP.count));
+    if (!drag.timer) {
+      buddy.setBounds({ x, y: y - dy, width: BUDDY_SIZE, height: BUDDY_SIZE });
+      buddy.webContents.send('buddy-motion', { vx: 0, vy: ((prev - dy) * 1000) / BUDDY_DRAG_MS, moving: !end });
+    }
+    prev = dy;
+    if (end) { clearInterval(hopTimer); hopTimer = null; }
+  }, BUDDY_DRAG_MS);
+}
+
 // ---------- Tray ----------
 
-// Icona dell'app (aibro.ico) con il badge di stato, per ogni scala DPI comune.
+// Icona dell'app (build/icon-256.ico) con il badge di stato, per ogni scala DPI comune.
 const ICONS = {};
 function icon(kind) {
   if (!ICONS[kind]) {
@@ -320,6 +344,8 @@ store.on('attention', (ev) => {
     notify(`${sessionTitle(ev.sessionId)} attende una risposta`, ev.message);
   } else if (ev.kind === 'done') {
     mood.done = { at: Date.now(), ok: !!ev.ok };
+    buddyHop();
+    buddy?.webContents.send('buddy-glow');
     refreshLocalRepos(); // a fine turno l'agente ha spesso appena modificato o committato
     if (config.notifyDone && !(win.isVisible() && win.isFocused())) {
       notify(`${sessionTitle(ev.sessionId)} ha finito`, ev.message, () => win.webContents.send('open-session', ev.sessionId));

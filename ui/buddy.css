@@ -30,6 +30,14 @@ img { -webkit-user-drag: none; }
 }
 .buddy[data-mood="work"] .chars { opacity: 1; }
 
+/* Sessione finita: la bolla si illumina da dentro con qualche pulsazione (fuori dal cerchio verrebbe tagliata dalla finestra). */
+.glow {
+  position: absolute; inset: 6%; border-radius: 50%; pointer-events: none; opacity: 0; mix-blend-mode: screen;
+  background: radial-gradient(circle at 50% 42%, rgba(255, 250, 215, .95), rgba(120, 225, 255, .55) 45%, rgba(120, 225, 255, 0) 72%);
+}
+.glow.on { animation: glow 1.1s ease-in-out 3; }
+@keyframes glow { 50% { opacity: 1; } }
+
 /* Dorme: respiro lento. Chiede qualcosa: un saltello ogni tanto per farsi notare. */
 .buddy[data-mood="nap"] .mood { animation: breathe 4s ease-in-out infinite; }
 .buddy[data-mood="quest"] .mood { animation: hop 1.6s ease-in-out infinite; }

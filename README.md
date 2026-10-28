@@ -24,7 +24,7 @@ npm run dist
 
 In `dist/` trovi `AiBro-Setup-<versione>.exe` (installazione per l'utente corrente, con collegamenti nel menu Start e sul desktop) e `AiBro-<versione>-portable.exe` (senza installazione). L'exe non include il binario di Claude Code dell'SDK: usa `claude.exe` installato sul PC (`~/.local/bin` o `PATH`). Gli hook eseguono una copia dello script in `~/.aibro/aibro-hook.js`, aggiornata a ogni avvio, quindi restano validi anche spostando o aggiornando l'app. L'exe non è firmato: al primo avvio Windows SmartScreen può chiedere conferma.
 
-L'icona dell'app è `aibro.ico` (usata anche nella tray, con un badge colorato per approvazioni, risposte attese e Actions fallite). Per l'exe `scripts/make-icon.js` crea `build/icon.ico` aggiungendo ai suoi formati 16/32/48 una versione 256×256 ritagliata dal logo in `aibro_1.jpg`.
+L'icona dell'app è `build/icon-256.ico` (usata anche nella tray, con un badge colorato per approvazioni, risposte attese e Actions fallite); `build/icon.ico` è la versione 32×32. Per l'exe `scripts/make-icon.js` crea `build/exe.ico` con il disegno grande portato a 256×256 più il 32×32, e `ui/logo.png`.
 
 Clic sull'icona nella tray per mostrare o nascondere la finestra; clic destro per il menu (hook, sempre in primo piano, avvio con Windows, esci).
 

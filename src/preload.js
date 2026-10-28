@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('aibro', {
   buddyIgnoreMouse: invoke('buddy:ignore-mouse'),
   onBuddyMood: on('buddy-mood'),
   onBuddyMotion: on('buddy-motion'),
+  onBuddyGlow: on('buddy-glow'),
   onState: on('state'),
   onMessages: on('session-messages'),
   onFocusApproval: on('focus-approval'),
